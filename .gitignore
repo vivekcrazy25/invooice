@@ -1,0 +1,87 @@
+# ========================
+# Dependencies
+# ========================
+node_modules/
+node_modules.bak/
+
+# ========================
+# Build Outputs
+# ========================
+dist/
+dist-react/
+release/
+out/
+
+# ========================
+# Environment & Secrets
+# ========================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ========================
+# Logs
+# ========================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ========================
+# OS Files
+# ========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ========================
+# Editor & IDE
+# ========================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ========================
+# Electron Builder Cache
+# ========================
+.cache/
+.electron-builder-cache/
+electron-builder-cache/
+
+# ========================
+# SQLite Database (user data — do not commit)
+# ========================
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================
+# Test & Debug Scripts
+# ========================
+test-db.js
+test-db-init.js
+dbDiagnostic.js
+
+# ========================
+# Internal project notes
+# ========================
+FIXES_APPLIED.md
+QUICK_FIX.md
+DATABASE_TROUBLESHOOTING.md
+design-vs-implementation-analysis.md
+
+# ========================
+# Misc
+# ========================
+*.pem
+.yarn-integrity
+.npm

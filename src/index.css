@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #F3F4F6;
+  color: #111827;
+  overflow: hidden;
+  height: 100vh;
+}
+
+#root { height: 100vh; display: flex; overflow: hidden; }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+
+/* Animations */
+@keyframes fadeUp   { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+@keyframes modalIn  { from { opacity:0; transform:scale(0.96);     } to { opacity:1; transform:scale(1);     } }
+@keyframes toastIn  { from { opacity:0; transform:translateX(16px);} to { opacity:1; transform:translateX(0);} }
+
+.anim-fadeup  { animation: fadeUp  0.25s ease both; }
+.anim-modal   { animation: modalIn 0.2s  ease both; }
+.anim-toast   { animation: toastIn 0.25s ease both; }
+
+/* Table row hover */
+tbody tr:hover { background-color: #F9FAFB; }
+
+/* Print styles */
+@media print {
+  body { background: white !important; color: black !important; }
+  .modal-overlay { display: none !important; }
+  .modal-content { box-shadow: none !important; border: none !important; }
+  .sidebar, .topbar, .actions, .buttons { display: none !important; }
+  .invoice-view { max-width: none !important; margin: 0 !important; padding: 20px !important; }
+}

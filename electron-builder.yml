@@ -1,0 +1,51 @@
+appId: com.accountingpro.app
+productName: AccountingPro
+copyright: Copyright © 2025 AccountingPro
+
+directories:
+  output: release
+  buildResources: assets
+
+files:
+  - dist-react/**/*
+  - electron/**/*
+  - package.json
+  - node_modules/**/*
+
+extraResources:
+  - from: assets/
+    to: assets/
+    filter: ["**/*"]
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: assets/icon.ico
+  requestedExecutionLevel: highestAvailable
+
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AccountingPro
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  installerHeader: assets/icon.ico
+  include: assets/installer.nsh
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: assets/icon.icns
+  category: public.app-category.finance
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: assets/icon.png
+  category: Office
