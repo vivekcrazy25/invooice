@@ -155,55 +155,218 @@ AccountingPro/
 
 ---
 
+## Recommended IDE
+
+> **Visual Studio Code** is the recommended editor for this project.
+
+[![Open in VS Code](https://img.shields.io/badge/Open%20in-VS%20Code-007ACC?logo=visual-studio-code)](https://code.visualstudio.com/)
+
+**Download VS Code:** https://code.visualstudio.com/
+
+### Recommended VS Code Extensions
+
+Install these extensions for the best development experience. In VS Code go to **Extensions** (`Ctrl+Shift+X` / `Cmd+Shift+X`) and search for each:
+
+| Extension | Purpose |
+|---|---|
+| **ES7+ React/Redux/React-Native snippets** | React component snippets |
+| **Tailwind CSS IntelliSense** | Autocomplete for Tailwind classes |
+| **Prettier – Code formatter** | Auto-format JS/JSX files |
+| **ESLint** | Catch JavaScript errors as you type |
+| **SQLite Viewer** | View the SQLite database directly in VS Code |
+| **Auto Rename Tag** | Auto-renames paired JSX tags |
+| **GitLens** | Enhanced Git history and blame annotations |
+
+You can also install all of them at once by opening the **Extensions** panel and searching `@recommended` — VS Code will pick them up from the `.vscode/extensions.json` if present.
+
+---
+
 ## Getting Started
 
-### Prerequisites
+### Step 1 — Prerequisites
 
-- [Node.js](https://nodejs.org/) v18 or later
-- npm v9 or later
-- On Windows: [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (required for `better-sqlite3` native compilation)
+Before you begin, make sure the following tools are installed on your machine:
 
-### Installation
+#### ✅ Node.js (v18 or later)
+Download from: https://nodejs.org/
+
+After installing, verify in your terminal:
+```bash
+node --version   # should print v18.x.x or higher
+npm --version    # should print 9.x.x or higher
+```
+
+#### ✅ Git
+Download from: https://git-scm.com/
+
+After installing, verify:
+```bash
+git --version    # should print git version 2.x.x
+```
+
+#### ✅ Windows Only — Visual Studio Build Tools
+Required for compiling `better-sqlite3` (the native database module).
+
+Download: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+
+During install, select **"Desktop development with C++"** workload and click Install.
+
+> **macOS users:** Run `xcode-select --install` in Terminal instead.
+> **Linux users:** Run `sudo apt-get install build-essential` (Ubuntu/Debian) or equivalent.
+
+---
+
+### Step 2 — Pull the Project from GitHub
 
 ```bash
-# 1. Clone the repository
+# Clone the repository to your local machine
 git clone https://github.com/YOUR_USERNAME/AccountingPro.git
+
+# Move into the project folder
 cd AccountingPro
+```
 
-# 2. Install dependencies
+> Replace `YOUR_USERNAME` with the actual GitHub username or organization name.
+
+If you want a **specific branch** instead of the default `main`:
+```bash
+git clone -b branch-name https://github.com/YOUR_USERNAME/AccountingPro.git
+```
+
+---
+
+### Step 3 — Install Dependencies
+
+```bash
 npm install
+```
 
-# 3. Rebuild native modules for Electron
+This installs all packages listed in `package.json`. It will take 1–3 minutes on first run.
+
+> ⚠️ If you see a node-gyp or binding error, your C++ build tools are missing — go back to Step 1 Prerequisites.
+
+---
+
+### Step 4 — Rebuild Native Modules
+
+Because Electron uses its own version of Node.js, the native SQLite module must be recompiled for it:
+
+```bash
 npm run rebuild
 ```
 
-### Development
+> You must run this once after `npm install`, and again any time you update Electron or `better-sqlite3`.
+
+---
+
+### Step 5 — Run in Development Mode
 
 ```bash
 npm run dev
 ```
 
-This starts the Vite dev server and Electron simultaneously. The app loads at `http://localhost:5173`.
+This command starts two processes simultaneously:
+- **Vite dev server** → serves the React frontend at `http://localhost:5173`
+- **Electron** → waits for Vite to be ready, then opens the desktop window
+
+The app window will open automatically. Any changes you make to files in `src/` will hot-reload instantly in the window.
+
+---
 
 ### Building for Production
 
-**Windows:**
+Once development is complete, build a distributable installer:
+
+**Windows (.exe installer):**
 ```bash
 npm run build
 ```
 Output: `release/AccountingPro Setup 1.0.0.exe`
 
-**macOS:**
+**macOS (.dmg):**
 ```bash
 npm run build:mac
 ```
 Output: `release/AccountingPro-1.0.0.dmg`
 
-**Linux:**
+**Linux (.AppImage):**
 ```bash
 npm run build:linux
 ```
 Output: `release/AccountingPro-1.0.0.AppImage`
+
+> The `release/` folder is excluded from Git — share the installer file directly with end users.
+
+---
+
+## Working with Git — Pull Latest Changes
+
+If someone else has pushed updates to the repository and you want to get their latest changes, follow these steps:
+
+### Pull from `main` branch
+
+```bash
+# 1. Make sure you're on the main branch
+git checkout main
+
+# 2. Fetch and merge the latest changes
+git pull origin main
+
+# 3. Reinstall packages if dependencies changed
+npm install
+
+# 4. Rebuild native modules if Electron version changed
+npm run rebuild
+```
+
+### Pull from a specific feature branch
+
+```bash
+# 1. Fetch all remote branches
+git fetch origin
+
+# 2. Switch to the branch you want
+git checkout branch-name
+
+# 3. Pull the latest commits on that branch
+git pull origin branch-name
+
+# 4. Install/rebuild if needed
+npm install && npm run rebuild
+```
+
+### Check which branch you're on
+
+```bash
+git branch           # lists local branches (* = current)
+git branch -a        # lists all branches including remote
+git status           # shows uncommitted changes
+git log --oneline    # shows recent commit history
+```
+
+### Common Git Workflow for Contributors
+
+```bash
+# 1. Always start by pulling the latest main
+git checkout main
+git pull origin main
+
+# 2. Create your own feature branch
+git checkout -b feature/your-feature-name
+
+# 3. Make your changes, then stage them
+git add .
+
+# 4. Commit with a clear message
+git commit -m "feat: describe what you changed"
+
+# 5. Push your branch to GitHub
+git push origin feature/your-feature-name
+
+# 6. Open a Pull Request on GitHub to merge into main
+```
+
+> **Tip:** Never commit directly to `main`. Always work on a separate branch and open a Pull Request so changes can be reviewed.
 
 ---
 
