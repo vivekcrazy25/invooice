@@ -6,6 +6,7 @@ export default function DataTable({
   loading = false,
   emptyMessage = 'No records found',
   onRowClick,
+  rowClassName,
   compact = false,
 }) {
   const [sortKey, setSortKey] = useState(null);
@@ -95,7 +96,7 @@ export default function DataTable({
               <tr
                 key={row.id ?? ri}
                 onClick={() => onRowClick?.(row)}
-                className={`border-t border-gray-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+                className={`border-t border-gray-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
               >
                 {columns.map((col, ci) => (
                   <td key={ci} className={`px-4 ${py} text-sm text-gray-700 whitespace-nowrap`}>

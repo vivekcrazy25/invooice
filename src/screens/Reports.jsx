@@ -17,13 +17,13 @@ import logger from '../utils/logger.js';
 
 /* ─── helpers ─── */
 const TABS = [
-  { key:'sales',       label:'Sales Report',       icon: TrendingUp  },
-  { key:'purchase',    label:'Purchase Report',     icon: Building2   },
-  { key:'stock',       label:'Stock Report',        icon: Package     },
-  { key:'pl',          label:'Profit & Loss',       icon: BarChart3   },
-  { key:'balance',     label:'Balance Sheet',       icon: FileText    },
-  { key:'customer_os', label:'Customer Outstanding',icon: Users       },
-  { key:'vendor_os',   label:'Vendor Outstanding',  icon: DollarSign  },
+  { key:'sales',       label:'Sales Report',        icon: TrendingUp  },
+  { key:'purchase',    label:'Purchase Report',      icon: Building2   },
+  { key:'stock',       label:'Stock Report',         icon: Package     },
+  { key:'customer_os', label:'Customer Outstanding', icon: Users       },
+  { key:'vendor_os',   label:'Vendor Outstanding',   icon: DollarSign  },
+  { key:'pl',          label:'Profit & Loss',        icon: BarChart3   },
+  { key:'balance',     label:'Balance Sheet',        icon: FileText    },
 ];
 
 function dateMonthStart() {
@@ -663,25 +663,24 @@ export default function Reports() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <TopBar title="Reports" subtitle="Financial and operational reports" />
+      <TopBar title="Reports" subtitle="Generate and analyze business reports" />
 
-      <div className="flex flex-1 overflow-hidden">
-
-        {/* ── Left sidebar nav ── */}
-        <div className="w-52 flex-shrink-0 bg-white border-r border-gray-100 py-3 overflow-y-auto">
-          {TABS.map(({ key, label, icon: Icon }) => (
+      {/* ── Horizontal tab bar ── */}
+      <div className="bg-white border-b border-gray-100 px-6 flex-shrink-0">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
+          {TABS.map(({ key, label }) => (
             <button key={key} onClick={() => switchTab(key)}
-              className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm
-                          transition-all border-l-2
-                          ${tab===key
-                            ? 'bg-gray-50 text-gray-900 font-semibold border-gray-900'
-                            : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-transparent'}`}>
-              <Icon size={14} className="flex-shrink-0" />
-              <span className="leading-tight">{label}</span>
+              className={`flex-shrink-0 px-4 py-3 text-sm font-medium transition-all border-b-2 whitespace-nowrap
+                          ${tab === key
+                            ? 'text-gray-900 border-gray-900 font-semibold'
+                            : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'}`}>
+              {label}
             </button>
           ))}
         </div>
+      </div>
 
+      <div className="flex flex-1 overflow-hidden">
         {/* ── Main content ── */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4 anim-fadeup">
 

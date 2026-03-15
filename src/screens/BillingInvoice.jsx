@@ -2,22 +2,24 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Search, RefreshCw, MoreVertical,
   Edit2, Trash2, Printer, Eye,
-  QrCode, Trash, ChevronDown, FileText,
+  QrCode, Trash, ChevronDown, FileText, ScanLine,
 } from 'lucide-react';
-import TopBar        from '../components/TopBar.jsx';
-import DataTable     from '../components/DataTable.jsx';
-import StatusBadge   from '../components/StatusBadge.jsx';
-import Modal         from '../components/Modal.jsx';
-import ConfirmDialog from '../components/ConfirmDialog.jsx';
-import FormInput     from '../components/FormInput.jsx';
-import FormSelect    from '../components/FormSelect.jsx';
-import { useToast }  from '../components/ToastContext.jsx';
+import TopBar              from '../components/TopBar.jsx';
+import DataTable           from '../components/DataTable.jsx';
+import StatusBadge         from '../components/StatusBadge.jsx';
+import Modal               from '../components/Modal.jsx';
+import ConfirmDialog       from '../components/ConfirmDialog.jsx';
+import FormInput           from '../components/FormInput.jsx';
+import FormSelect          from '../components/FormSelect.jsx';
+import { useToast }        from '../components/ToastContext.jsx';
+import BarcodeScannerModal from '../components/BarcodeScannerModal.jsx';
+import { useBarcodeGun }   from '../hooks/useBarcodeGun.js';
 import { formatCurrency, formatDate, today } from '../utils/formatters.js';
 
 /* ─────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────── */
-const TABS = ['Invoices', 'Return & Exchange', 'Completed'];
+const TABS = ['Invoices', 'Refund & Exchange', 'Completed'];
 
 const EMPTY_FORM = {
   customer_name: '', customer_phone: '', type: 'Sale',
@@ -56,6 +58,35 @@ export default function BillingInvoice() {
   const [prodResults, setProdResults] = useState([]);
   const [prodLoading, setProdLoading] = useState(false);
   const searchRef = useRef(null);
+
+  /* barcode scanner */
+  const [showScanner, setShowScanner] = useState(false);
+
+  /* Handle barcode from either gun or webcam */
+  const handleBarcode = useCallback(async (code) => {
+    setShowScanner(false);
+    try {
+      const product = await window.db.inventory.getByBarcode(code);
+      if (product) {
+        addProduct(product);
+        toast(`Added: ${product.name}`, 'success');
+      } else {
+        // Try SKU lookup as fallback
+        const bySku = await window.db.inventory.getBySku(code);
+        if (bySku) {
+          addProduct(bySku);
+          toast(`Added: ${bySku.name}`, 'success');
+        } else {
+          toast(`No product found for barcode: ${code}`, 'warning');
+        }
+      }
+    } catch {
+      toast('Barcode lookup failed', 'error');
+    }
+  }, []); // eslint-disable-line
+
+  /* Barcode gun listener — active only when the invoice form is open */
+  useBarcodeGun({ onScan: handleBarcode, enabled: showForm && !showScanner });
 
   /* ── fetch invoices ── */
   const fetchInvoices = useCallback(async () => {
@@ -422,7 +453,19 @@ export default function BillingInvoice() {
           subtotal={subtotal}
           grandTotal={grandTotal}
           onSave={handleSave}
+          onOpenScanner={() => setShowScanner(true)}
           onClose={() => { setShowForm(false); setEditInvoice(null); }}
+        />
+      )}
+
+      {/* ═══════════════════════════════════
+          BARCODE SCANNER MODAL
+      ═══════════════════════════════════ */}
+      {showScanner && (
+        <BarcodeScannerModal
+          title="Scan Product Barcode"
+          onScan={handleBarcode}
+          onClose={() => setShowScanner(false)}
         />
       )}
 
@@ -458,7 +501,7 @@ function InvoiceForm({
   searchRef, addProduct,
   updateItem, removeItem,
   subtotal, grandTotal,
-  onSave, onClose,
+  onSave, onClose, onOpenScanner,
 }) {
   const PAYMENT_MODES = ['Cash', 'Card', 'EFT', 'UPI', 'Split'];
 
@@ -499,19 +542,31 @@ function InvoiceForm({
           <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
             Add Products
           </label>
-          <div className="relative">
-            <QrCode size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            {prodLoading && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-            )}
-            <input
-              ref={searchRef}
-              className="w-full pl-9 pr-10 py-2 text-sm bg-white border border-gray-200 rounded-xl
-                         focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-400"
-              placeholder="Search by product name or SKU…"
-              value={prodSearch}
-              onChange={e => setProdSearch(e.target.value)}
-            />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <QrCode size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              {prodLoading && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+              )}
+              <input
+                ref={searchRef}
+                className="w-full pl-9 pr-10 py-2 text-sm bg-white border border-gray-200 rounded-xl
+                           focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-400"
+                placeholder="Search by name, SKU, or scan barcode…"
+                value={prodSearch}
+                onChange={e => setProdSearch(e.target.value)}
+              />
+            </div>
+            {/* Webcam scanner button */}
+            <button
+              type="button"
+              onClick={onOpenScanner}
+              title="Open barcode scanner (webcam)"
+              className="flex items-center gap-1.5 px-3 py-2 bg-gray-900 text-white rounded-xl
+                         text-xs font-semibold hover:bg-gray-700 transition-colors flex-shrink-0"
+            >
+              <ScanLine size={14}/> Scan
+            </button>
           </div>
 
           {/* Search dropdown */}

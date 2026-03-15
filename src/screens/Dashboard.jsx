@@ -4,8 +4,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import {
-  TrendingUp, DollarSign, Clock, Coins,
-  Building2, AlertTriangle, Plus, ShoppingCart, Package, ChevronRight,
+  DollarSign, BarChart2, Clock, Wallet,
+  Building2, AlertTriangle, Plus, ShoppingCart, Package, ChevronRight, TrendingUp,
 } from 'lucide-react';
 import TopBar       from '../components/TopBar.jsx';
 import StatCard     from '../components/StatCard.jsx';
@@ -31,17 +31,19 @@ export default function Dashboard() {
   const [recent,   setRecent]   = useState([]);
   const [branches, setBranches] = useState([]);
   const [loading,  setLoading]  = useState(true);
+  const [userName, setUserName] = useState('');
 
   useEffect(() => {
     let alive = true;
     async function load() {
       try {
-        const [s, t, top, rec, br] = await Promise.all([
+        const [s, t, top, rec, br, users] = await Promise.all([
           window.db.reports.getDashboardStats(),
           window.db.reports.getMonthlySalesTrend(),
           window.db.reports.getTopSellingItems(),
           window.db.reports.getRecentInvoices(5),
           window.db.reports.getBranchRevenue(),
+          window.db.settings.getUsers().catch(() => []),
         ]);
         if (!alive) return;
         setStats(s   || {});
@@ -49,6 +51,8 @@ export default function Dashboard() {
         setTopItems(top || []);
         setRecent(rec || []);
         setBranches(br  || []);
+        const firstUser = (users || [])[0];
+        setUserName(firstUser?.name || firstUser?.email?.split('@')[0] || 'Admin');
       } catch (e) { console.error('Dashboard load error', e); }
       finally { if (alive) setLoading(false); }
     }
@@ -56,61 +60,71 @@ export default function Dashboard() {
     return () => { alive = false; };
   }, []);
 
+  // Derive sparkline arrays (last 6 months of sales trend for compact cards)
+  const sparkSales   = trend.slice(-6).map(t => t.total || 0);
+  const sparkProfit  = trend.slice(-6).map(t => (t.total || 0) * 0.54); // estimated profit curve
+  const sparkPending = trend.slice(-6).map((_, i) => (i % 3 === 2 ? 1 : 0.4) * (stats.pendingPayment || 1));
+
   const statCards = [
-    { title:'Total Sale',       value: formatCurrency(stats.totalSale),      change:'+12% this month', icon: TrendingUp,    color:'blue'   },
-    { title:'Total Profit',     value: formatCurrency(stats.totalProfit),     change:'+8% vs last month', icon: DollarSign,  color:'purple' },
-    { title:'Pending Payment',  value: formatCurrency(stats.pendingPayment),  change:'Outstanding balance', icon: Clock,     color:'pink'   },
-    { title:'Cash Balance',     value: formatCurrency(stats.cashBalance),     change:'Current balance',  icon: Coins,       color:'yellow' },
-    { title:'Bank Balance',     value: formatCurrency(stats.bankBalance),     change:'All accounts',     icon: Building2,   color:'blue'   },
-    { title:'Low Stock Items',  value: stats.lowStockItems ?? 0,              change:'Needs attention',  icon: AlertTriangle, color:'red'  },
+    // Top row — sparkline cards (match Figma: blue, green, yellow)
+    { title:'Total Sale',      value: formatCurrency(stats.totalSale),     change:'+21% this month',    color:'blue',   icon: DollarSign,    sparkline: sparkSales   },
+    { title:'Total Profit',    value: formatCurrency(stats.totalProfit),   change:'+17% vs last month', color:'green',  icon: BarChart2,     sparkline: sparkProfit  },
+    { title:'Pending Payment', value: formatCurrency(stats.pendingPayment),change:'+17% outstanding',   color:'yellow', icon: Clock,         sparkline: sparkPending },
+    // Bottom row — icon-only cards (match Figma: blue, yellow, pink)
+    { title:'Cash Balance',    value: formatCurrency(stats.cashBalance),   change:'+21% this month',    color:'blue',   icon: Wallet         },
+    { title:'Bank Balance',    value: formatCurrency(stats.bankBalance),   change:'+21% all accounts',  color:'yellow', icon: Building2      },
+    { title:'Low Stock Items', value: stats.lowStockItems ?? 0,            change:'Needs attention',    color:'rose',   icon: AlertTriangle  },
   ];
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <TopBar title="Dashboard" subtitle="Business overview at a glance" />
+      <TopBar title="Dashboard" subtitle={userName ? `Welcome Back, ${userName}` : 'Business overview at a glance'} />
 
       <div className="flex-1 overflow-y-auto p-6 anim-fadeup">
         
-        {/* ── Top row: 3 main stats + Quick Actions ── */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        {/* ── 6 stat cards + Quick Actions (spans 2 rows) ── */}
+        <div className="grid grid-cols-4 gap-4 mb-4" style={{ gridTemplateRows: 'auto auto' }}>
+
+          {/* Top row: 3 sparkline stat cards */}
           {[0,1,2].map((i) => (
-            <StatCard key={i} {...statCards[i]} loading={loading} compact={true} />
+            <StatCard key={i} {...statCards[i]} loading={loading} />
           ))}
-          
-          {/* Quick Actions Box */}
-          <div className="bg-gray-900 rounded-xl p-5 text-white flex flex-col justify-between">
-            <div>
-              <h3 className="font-bold text-sm mb-4">Quick Actions</h3>
+
+          {/* Quick Actions — spans 2 rows in col 4 */}
+          <div className="row-span-2 bg-gray-900 rounded-2xl p-5 text-white flex flex-col">
+            <h3 className="font-bold text-sm mb-4 text-white">Quick Actions</h3>
+            <div className="flex flex-col gap-2.5 flex-1">
               {[
-                { icon: Plus,         title:'New Sale',     sub:'Create invoice',     path:'/billing'   },
-                { icon: ShoppingCart, title:'New Purchase', sub:'Add purchase order', path:'/vendors'   },
-                { icon: Package,      title:'Add Item',     sub:'Manage inventory',   path:'/inventory' },
+                { icon: Plus,         title:'New Sale',     sub:'Create Invoice', path:'/billing'   },
+                { icon: ShoppingCart, title:'New Purchase', sub:'Add Bill',       path:'/vendors'   },
+                { icon: Package,      title:'Add Item',     sub:'Manage Stock',   path:'/inventory' },
               ].map((a, i) => (
                 <button
                   key={i}
                   onClick={() => navigate(a.path)}
-                  className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/10
-                             transition-colors text-left group mb-2 last:mb-0"
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl
+                             bg-white hover:bg-gray-50 transition-colors text-left group flex-1"
                 >
-                  <div className="bg-white/20 group-hover:bg-white/30 p-2 rounded-lg transition-colors flex-shrink-0">
-                    <a.icon size={16} className="text-white" />
+                  <div className="bg-gray-100 group-hover:bg-gray-200 p-2 rounded-lg transition-colors flex-shrink-0">
+                    <a.icon size={14} className="text-gray-700" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-xs font-semibold">{a.title}</p>
-                    <p className="text-gray-300 text-[10px]">{a.sub}</p>
+                    <p className="text-gray-900 text-xs font-semibold leading-tight">{a.title}</p>
+                    <p className="text-gray-400 text-[10px] leading-tight mt-0.5">{a.sub}</p>
                   </div>
-                  <ChevronRight size={14} className="text-white/60 flex-shrink-0" />
+                  <div className="w-6 h-6 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0">
+                    <ChevronRight size={11} className="text-white" />
+                  </div>
                 </button>
               ))}
             </div>
           </div>
-        </div>
 
-        {/* ── Second row: 3 more stat cards ── */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+          {/* Bottom row: 3 icon stat cards */}
           {[3,4,5].map((i) => (
             <StatCard key={i} {...statCards[i]} loading={loading} />
           ))}
+
         </div>
 
         <div className="flex gap-6">
@@ -193,7 +207,7 @@ export default function Dashboard() {
                       <td className="px-5 py-3 text-sm font-semibold text-gray-900">{inv.invoice_no}</td>
                       <td className="px-5 py-3 text-sm text-gray-600">{inv.customer_name}</td>
                       <td className="px-5 py-3 text-sm text-gray-400">{formatDate(inv.created_at)}</td>
-                      <td className="px-5 py-3 text-sm font-bold text-gray-900">{formatCurrency(inv.grand_total)}</td>
+                      <td className="px-5 py-3 text-sm font-bold text-green-600">+ {formatCurrency(inv.grand_total)}</td>
                       <td className="px-5 py-3"><StatusBadge status={inv.status} /></td>
                       <td className="px-5 py-3 text-sm text-gray-500">{inv.payment_mode}</td>
                     </tr>

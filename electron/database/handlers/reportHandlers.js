@@ -99,28 +99,28 @@ function registerReportHandlers(ipcMain) {
     
     // Aggregate totals
     const revenue = db.prepare(`SELECT COALESCE(SUM(i.grand_total),0) s FROM invoices i ${where}`).get(p).s;
-    const cogs    = db.prepare(`SELECT COALESCE(SUM(ii.qty*COALESCE(p.purchase_price,0)),0) s
+    const cogs    = db.prepare(`SELECT COALESCE(SUM(ii.qty*COALESCE(pr.purchase_price,0)),0) s
       FROM invoices i JOIN invoice_items ii ON ii.invoice_id=i.id
-      LEFT JOIN products p ON ii.product_id=p.id ${where}`).get(p).s;
+      LEFT JOIN products pr ON ii.product_id=pr.id ${where}`).get(p).s;
     const expenses= db.prepare('SELECT COALESCE(SUM(amount),0) s FROM expenses').get().s;
     const expBreak= db.prepare(`SELECT ec.name,COALESCE(SUM(e.amount),0) total
       FROM expense_categories ec LEFT JOIN expenses e ON e.category_id=ec.id
       GROUP BY ec.id,ec.name HAVING total>0`).all();
     
-    // Product-level profitability
+    // Product-level profitability  (invoice_items uses 'rate', not 'unit_price')
     const productProfitability = db.prepare(`
-      SELECT 
+      SELECT
         ii.product_id,
         ii.product_name,
-        COALESCE(p.purchase_price, 0) cost_price,
-        COALESCE(AVG(ii.unit_price), 0) sales_price,
-        COALESCE(SUM(ii.qty), 0) units_sold,
-        COALESCE(SUM(ii.qty * ii.unit_price), 0) total_sales,
-        COALESCE(SUM(ii.qty * COALESCE(p.purchase_price, 0)), 0) total_cost,
-        COALESCE(SUM(ii.qty * ii.unit_price) - SUM(ii.qty * COALESCE(p.purchase_price, 0)), 0) total_profit
+        COALESCE(pr.purchase_price, 0)              AS cost_price,
+        COALESCE(AVG(ii.rate), 0)                   AS sales_price,
+        COALESCE(SUM(ii.qty), 0)                    AS units_sold,
+        COALESCE(SUM(ii.qty * ii.rate), 0)          AS total_sales,
+        COALESCE(SUM(ii.qty * COALESCE(pr.purchase_price, 0)), 0) AS total_cost,
+        COALESCE(SUM(ii.qty * ii.rate) - SUM(ii.qty * COALESCE(pr.purchase_price, 0)), 0) AS total_profit
       FROM invoice_items ii
-      LEFT JOIN invoices i ON ii.invoice_id = i.id
-      LEFT JOIN products p ON ii.product_id = p.id
+      LEFT JOIN invoices i  ON ii.invoice_id  = i.id
+      LEFT JOIN products pr ON ii.product_id  = pr.id
       ${where}
       GROUP BY ii.product_id, ii.product_name
       ORDER BY total_profit DESC

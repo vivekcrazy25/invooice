@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Users, Lock, Database,
-  Plus, Edit2, Trash2, Eye, EyeOff, Save, Upload, Trash,
+  Plus, Edit2, Trash2, Eye, EyeOff, Save, Upload, Trash, Shield,
+  TrendingUp, TrendingDown, Wallet, Search, Filter, Download, Info,
 } from 'lucide-react';
 import TopBar        from '../components/TopBar.jsx';
 import DataTable     from '../components/DataTable.jsx';
@@ -10,21 +11,51 @@ import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import FormInput     from '../components/FormInput.jsx';
 import FormSelect    from '../components/FormSelect.jsx';
 import { useToast }  from '../components/ToastContext.jsx';
+import { useAuth, ALL_PERMISSIONS, PERMISSION_LABELS, ROLE_DEFAULTS } from '../context/AuthContext.jsx';
+import { useTheme } from '../context/ThemeContext.jsx';
 
 const TABS = [
   { key:'company', label:'Company Profile', icon: Building2  },
-  { key:'accounts',label:'Accounts Management', icon: Database },
+  { key:'accounts',label:'Accounts Chart',  icon: Database   },
   { key:'users',   label:'User Management', icon: Users      },
   { key:'backup',  label:'Backup & Security',  icon: Lock    },
 ];
 
-const ROLES = ['Admin','Manager','Staff'];
-const EMPTY_USER = { name:'', email:'', role:'Staff', password:'', branch_id:'' };
-const ACC_TYPES  = ['Asset','Liability','Equity','Revenue','Expense'];
-const EMPTY_ACC  = { account_code:'', account_name:'', account_type:'Asset', description:'' };
+const ROLES = ['Owner','Accountant','Billing Operator'];
+const EMPTY_USER = { name:'', email:'', phone:'', role:'Accountant', password:'', branch_id:'' };
+const ACC_TYPES  = ['Cash','Bank','Capital','Sales','Purchase','Expense','Asset','Liability','Equity','Revenue'];
+const EMPTY_ACC  = { account_code:'', account_name:'', account_type:'', description:'', opening_balance: 0, as_of_date: '' };
+
+const ACC_TYPE_COLORS = {
+  Cash:      'bg-blue-50 text-blue-600',
+  Bank:      'bg-blue-50 text-blue-600',
+  Capital:   'bg-green-50 text-green-700',
+  Sales:     'bg-amber-50 text-amber-600',
+  Purchase:  'bg-orange-50 text-orange-600',
+  Expense:   'bg-red-50 text-red-600',
+  Asset:     'bg-emerald-50 text-emerald-700',
+  Liability: 'bg-rose-50 text-rose-600',
+  Equity:    'bg-indigo-50 text-indigo-600',
+  Revenue:   'bg-teal-50 text-teal-600',
+};
+
+const AVATAR_PALETTE = [
+  'bg-blue-100 text-blue-700',
+  'bg-green-100 text-green-700',
+  'bg-orange-100 text-orange-700',
+  'bg-purple-100 text-purple-700',
+  'bg-amber-100 text-amber-700',
+  'bg-pink-100 text-pink-700',
+  'bg-teal-100 text-teal-700',
+  'bg-indigo-100 text-indigo-700',
+];
+const avatarColor = (name = '') => AVATAR_PALETTE[(name.charCodeAt(0) || 0) % AVATAR_PALETTE.length];
 
 export default function Settings() {
   const toast = useToast();
+  const { currentUser, hasPermission } = useAuth();
+  const { dark, toggleDark } = useTheme();
+  const isOwner = currentUser?.role === 'Owner' || currentUser?.role === 'Admin';
   const [tab, setTab] = useState('company');
 
   /* ── company ── */
@@ -39,6 +70,13 @@ export default function Settings() {
   const [userForm,   setUserForm]   = useState(EMPTY_USER);
   const [uErrors,    setUErrors]    = useState({});
   const [showPwd,    setShowPwd]    = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+
+  /* ── permissions ── */
+  const [permUser,   setPermUser]   = useState(null);   // user being edited
+  const [permMap,    setPermMap]    = useState({});      // { permKey: bool }
+  const [showPerms,  setShowPerms]  = useState(false);
+  const [permSaving, setPermSaving] = useState(false);
 
   /* ── coa ── */
   const [accounts,   setAccounts]  = useState([]);
@@ -46,6 +84,7 @@ export default function Settings() {
   const [editCoa,    setEditCoa]   = useState(null);
   const [coaForm,    setCoaForm]   = useState(EMPTY_ACC);
   const [cErrors,    setCErrors]   = useState({});
+  const [coaSearch,  setCoaSearch] = useState('');
 
   /* ── prefs ── */
   const [prefs,   setPrefs]   = useState({});
@@ -393,35 +432,165 @@ export default function Settings() {
     } catch { toast('Cannot delete the last admin', 'error'); setDeleteUser(null); }
   };
 
-  const userCols = [
-    { header:'Name',   key:'name',   render:v=><span className="font-semibold text-gray-900">{v}</span> },
-    { header:'Email',  key:'email' },
-    { header:'Role',   key:'role',   render:v=><StatusBadge status={v}/> },
-    { header:'Actions',render:(_,row)=>(
-      <div className="flex items-center gap-1">
-        <button onClick={()=>openEditUser(row)}
-          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700">
-          <Edit2 size={13}/>
-        </button>
-        <button onClick={()=>setDeleteUser(row.id)}
-          className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500">
-          <Trash2 size={13}/>
-        </button>
-      </div>
-    )},
-  ];
+  /* ── permissions handlers ── */
+  const openPerms = async (row) => {
+    try {
+      const perms = await window.db.settings.getUserPermissions(row.id);
+      // Merge with role defaults for any missing keys
+      const defaults = ROLE_DEFAULTS[row.role] || ROLE_DEFAULTS['Staff'];
+      const merged = {};
+      for (const p of ALL_PERMISSIONS) merged[p] = p in perms ? perms[p] : (defaults[p] ?? false);
+      setPermUser(row);
+      setPermMap(merged);
+      setShowPerms(true);
+    } catch {
+      toast('Failed to load permissions', 'error');
+    }
+  };
 
-  const UsersTab = () => (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <button onClick={openAddUser}
-          className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-800 shadow-sm">
-          <Plus size={15}/> Add User
-        </button>
+  const savePerms = async () => {
+    if (!permUser) return;
+    setPermSaving(true);
+    try {
+      await window.db.settings.updateUserPermissions(permUser.id, permMap);
+      toast(`Permissions updated for ${permUser.name}`);
+      setShowPerms(false);
+    } catch {
+      toast('Failed to save permissions', 'error');
+    }
+    setPermSaving(false);
+  };
+
+  const toggleUserStatus = async (row) => {
+    const newStatus = row.status === 'Active' ? 'Inactive' : 'Active';
+    try {
+      await window.db.settings.toggleUserStatus(row.id, newStatus);
+      setUsers(u => u.map(x => x.id === row.id ? { ...x, status: newStatus } : x));
+    } catch { toast('Failed to update status', 'error'); }
+  };
+
+  const ROLE_BADGE = {
+    Owner:             'border border-blue-400 text-blue-600 bg-blue-50',
+    Accountant:        'border border-gray-300 text-gray-600 bg-white',
+    'Billing Operator':'border border-gray-300 text-gray-600 bg-white',
+    Admin:             'border border-purple-400 text-purple-600 bg-purple-50',
+    Staff:             'border border-gray-300 text-gray-500 bg-white',
+  };
+
+  const UsersTab = () => {
+    const q = userSearch.toLowerCase();
+    const visible = users.filter(u =>
+      !q || u.name?.toLowerCase().includes(q) ||
+            u.email?.toLowerCase().includes(q) ||
+            u.role?.toLowerCase().includes(q)
+    );
+    return (
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-3 px-5 py-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={userSearch}
+              onChange={e => setUserSearch(e.target.value)}
+              placeholder="Search users by name, email, or role..."
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200 bg-gray-50"
+            />
+          </div>
+          <button onClick={openAddUser}
+            className="ml-auto flex items-center gap-2 bg-gray-900 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-800">
+            <Plus size={14}/> Add New User
+          </button>
+        </div>
+
+        {/* Table */}
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-t border-b border-gray-100">
+              <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-gray-400 tracking-wider uppercase">User Name</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-400 tracking-wider uppercase">Mobile Number</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-400 tracking-wider uppercase">Role</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-400 tracking-wider uppercase">Status</th>
+              <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-gray-400 tracking-wider uppercase">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.length === 0 && (
+              <tr><td colSpan={5} className="px-5 py-10 text-center text-gray-400">No users found.</td></tr>
+            )}
+            {visible.map(row => {
+              const initials = (row.name || '?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+              const avatarCls = avatarColor(row.name || '');
+              const isActive  = row.status === 'Active';
+              const roleCls   = ROLE_BADGE[row.role] || ROLE_BADGE['Staff'];
+              return (
+                <tr key={row.id} className="border-t border-gray-50 hover:bg-gray-50/50 transition-colors">
+                  {/* User Name */}
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${avatarCls}`}>
+                        {initials}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 text-sm">{row.name}</p>
+                        <p className="text-xs text-gray-400">{row.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  {/* Mobile */}
+                  <td className="px-4 py-3.5 text-gray-600 text-sm">
+                    {row.phone || '—'}
+                  </td>
+                  {/* Role */}
+                  <td className="px-4 py-3.5">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide uppercase ${roleCls}`}>
+                      {row.role}
+                    </span>
+                  </td>
+                  {/* Status toggle */}
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        onClick={() => toggleUserStatus(row)}
+                        className={`w-10 rounded-full flex items-center px-0.5 flex-shrink-0 transition-colors ${isActive ? 'bg-gray-900' : 'bg-gray-300'}`}
+                        style={{ height: 22, minWidth: 40 }}
+                      >
+                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${isActive ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </button>
+                      <span className={`text-sm font-medium ${isActive ? 'text-gray-700' : 'text-gray-400'}`}>
+                        {isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                  </td>
+                  {/* Actions */}
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center justify-center gap-1">
+                      {isOwner && row.role !== 'Owner' && row.role !== 'Admin' && (
+                        <button onClick={() => openPerms(row)}
+                          title="Manage permissions"
+                          className="p-1.5 hover:bg-blue-50 rounded-lg text-gray-400 hover:text-blue-600 transition-colors">
+                          <Shield size={13}/>
+                        </button>
+                      )}
+                      <button onClick={() => openEditUser(row)}
+                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors">
+                        <Edit2 size={13}/>
+                      </button>
+                      <button onClick={() => setDeleteUser(row.id)}
+                        className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-colors">
+                        <Trash2 size={13}/>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-      <DataTable columns={userCols} data={users} emptyMessage="No users found." />
-    </div>
-  );
+    );
+  };
 
   /* ═══════════════════════════
      CHART OF ACCOUNTS
@@ -442,8 +611,8 @@ export default function Settings() {
 
   const validateCoa = () => {
     const e = {};
-    if (!coaForm.account_code.trim()) e.account_code = 'Account code is required';
     if (!coaForm.account_name.trim()) e.account_name = 'Account name is required';
+    if (!coaForm.account_type)        e.account_type = 'Account type is required';
     setCErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -463,30 +632,166 @@ export default function Settings() {
     } catch (err) { toast(err?.message || 'Failed to save account', 'error'); }
   };
 
-  const coaCols = [
-    { header:'Code',    key:'account_code', render:v=><span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{v}</span> },
-    { header:'Name',    key:'account_name', render:v=><span className="font-semibold text-gray-900">{v}</span> },
-    { header:'Type',    key:'account_type', render:v=><StatusBadge status={v}/> },
-    { header:'Desc',    key:'description',  render:v=>v||'—' },
-    { header:'Actions', render:(_,row)=>(
-      <button onClick={()=>openEditCoa(row)}
-        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700">
-        <Edit2 size={13}/>
-      </button>
-    )},
-  ];
+  /* ── CoA export ── */
+  const exportCoa = () => {
+    const rows = [['Account Name','Account Type','Opening Balance','Created Date']];
+    accounts.forEach(a => rows.push([
+      a.account_name, a.account_type,
+      (a.opening_balance || 0).toFixed(2),
+      a.created_at ? a.created_at.slice(0,10) : '—',
+    ]));
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type:'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'accounts.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
 
-  const CoaTab = () => (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <button onClick={openAddCoa}
-          className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-800 shadow-sm">
-          <Plus size={15}/> Add Account
-        </button>
+  const CoaTab = () => {
+    /* stat cards */
+    const totalAssets      = accounts.filter(a=>['Asset','Cash','Bank','Capital','Equity'].includes(a.account_type)).reduce((s,a)=>s+(a.opening_balance||0),0);
+    const totalLiabilities = accounts.filter(a=>['Liability','Purchase'].includes(a.account_type)).reduce((s,a)=>s+(a.opening_balance||0),0);
+    const netEquity        = totalAssets - totalLiabilities;
+
+    const fmt = v => '$\u00a0' + Math.abs(v).toLocaleString('en-IN');
+
+    const q = coaSearch.toLowerCase();
+    const visible = accounts.filter(a =>
+      !q || a.account_name?.toLowerCase().includes(q) || a.account_type?.toLowerCase().includes(q)
+    );
+
+    return (
+      <div className="space-y-4">
+
+        {/* Stat Cards */}
+        <div className="grid grid-cols-3 gap-4">
+          {/* Total Assets */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0">
+              <TrendingUp size={18} className="text-green-600" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 font-medium mb-0.5">Total Assets</p>
+              <p className="text-xl font-bold text-gray-900">{fmt(totalAssets)}</p>
+            </div>
+          </div>
+          {/* Total Liabilities */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
+              <TrendingDown size={18} className="text-red-500" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 font-medium mb-0.5">Total Liabilities</p>
+              <p className="text-xl font-bold text-gray-900">{fmt(totalLiabilities)}</p>
+            </div>
+          </div>
+          {/* Net Equity */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+              <Wallet size={18} className="text-blue-600" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 font-medium mb-0.5">Net Equity</p>
+              <p className="text-xl font-bold text-gray-900">{fmt(netEquity)}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Table Card */}
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+
+          {/* Toolbar */}
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+            <div className="relative flex-1 max-w-sm">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={coaSearch}
+                onChange={e => setCoaSearch(e.target.value)}
+                placeholder="Search account name or type..."
+                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+              />
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <button className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 font-medium">
+                <Filter size={13}/> Filter
+              </button>
+              <button onClick={exportCoa}
+                className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 font-medium">
+                <Download size={13}/> Export
+              </button>
+              <button onClick={openAddCoa}
+                className="flex items-center gap-1.5 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-800">
+                <Plus size={13}/> Add Account
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-900 text-white">
+                <th className="px-5 py-3 text-left text-xs font-semibold tracking-wide uppercase">Account Name</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide uppercase">Account Type</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold tracking-wide uppercase">Opening Balance</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide uppercase">Created Date</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide uppercase">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.length === 0 && (
+                <tr><td colSpan={5} className="px-5 py-10 text-center text-gray-400 text-sm">No accounts found.</td></tr>
+              )}
+              {visible.map((row, i) => {
+                const initials = (row.account_name || '?').charAt(0).toUpperCase();
+                const avatarCls = avatarColor(row.account_name || '');
+                const typeCls   = ACC_TYPE_COLORS[row.account_type] || 'bg-gray-100 text-gray-600';
+                const date      = row.created_at ? new Date(row.created_at).toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'numeric'}) : '—';
+                return (
+                  <tr key={row.id} className={`border-t border-gray-50 hover:bg-gray-50/60 transition-colors ${i%2===0?'':'bg-white'}`}>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0 ${avatarCls}`}>
+                          {initials}
+                        </div>
+                        <span className="font-semibold text-gray-900">{row.account_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${typeCls}`}>
+                        {row.account_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 text-right font-medium text-gray-800">
+                      $ {(row.opening_balance || 0).toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 })}
+                    </td>
+                    <td className="px-4 py-3.5 text-gray-500">{date}</td>
+                    <td className="px-4 py-3.5 text-center">
+                      <button onClick={() => openEditCoa(row)}
+                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors">
+                        <Edit2 size={14}/>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {/* Important Note */}
+          <div className="mx-5 my-4 flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-xl p-4">
+            <Info size={16} className="text-gray-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-0.5">Important Note</p>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Deleting an account is only possible if it has no transaction history. For existing accounts with records, consider making them "Inactive" instead from the settings panel.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
-      <DataTable columns={coaCols} data={accounts} emptyMessage="No accounts in chart of accounts." />
-    </div>
-  );
+    );
+  };
 
   /* ═══════════════════════════
      PREFERENCES
@@ -512,11 +817,14 @@ export default function Settings() {
         <label className="flex items-center justify-between cursor-pointer group">
           <div>
             <p className="text-sm font-medium text-gray-800">Dark Mode</p>
-            <p className="text-xs text-gray-400 mt-0.5">Toggle dark appearance (restart required)</p>
+            <p className="text-xs text-gray-400 mt-0.5">Toggle dark appearance instantly</p>
           </div>
           <Toggle
-            on={prefs.dark_mode === 'true'}
-            onClick={() => setP('dark_mode', prefs.dark_mode === 'true' ? 'false' : 'true')}
+            on={dark}
+            onClick={() => {
+              toggleDark();
+              setP('dark_mode', dark ? 'false' : 'true');
+            }}
           />
         </label>
 
@@ -643,10 +951,11 @@ export default function Settings() {
   /* ─── StatusBadge inline (avoid import collision) ─── */
   const StatusBadge = ({ status }) => {
     const MAP = {
-      Admin:'bg-purple-100 text-purple-700', Manager:'bg-blue-100 text-blue-700',
-      Staff:'bg-gray-100 text-gray-600', Asset:'bg-green-100 text-green-700',
-      Liability:'bg-red-100 text-red-700', Equity:'bg-blue-100 text-blue-700',
-      Revenue:'bg-teal-100 text-teal-700', Expense:'bg-orange-100 text-orange-700',
+      Owner:'bg-purple-100 text-purple-700', Accountant:'bg-blue-100 text-blue-700',
+      'Billing Operator':'bg-yellow-100 text-yellow-700',
+      Asset:'bg-green-100 text-green-700', Liability:'bg-red-100 text-red-700',
+      Equity:'bg-blue-100 text-blue-700', Revenue:'bg-teal-100 text-teal-700',
+      Expense:'bg-orange-100 text-orange-700',
     };
     return (
       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold
@@ -658,7 +967,14 @@ export default function Settings() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <TopBar title="Settings" subtitle="Configure your application" />
+      <TopBar
+        title={tab === 'accounts' ? 'Account Management' : tab === 'users' ? 'User Management' : 'Settings'}
+        subtitle={
+          tab === 'accounts' ? 'Manage your database security, automated schedules, and recovery points.' :
+          tab === 'users'    ? 'Manage your database security, automated schedules, and recovery points.' :
+          'Configure your application'
+        }
+      />
 
       <div className="flex flex-1 overflow-hidden">
 
@@ -693,8 +1009,12 @@ export default function Settings() {
           <div className="space-y-4">
             <FormInput label="Full Name" required value={userForm.name}
               onChange={e=>setUserForm(f=>({...f,name:e.target.value}))} error={uErrors.name} placeholder="John Doe" />
-            <FormInput label="Email" required type="email" value={userForm.email}
-              onChange={e=>setUserForm(f=>({...f,email:e.target.value}))} error={uErrors.email} placeholder="user@company.com" />
+            <div className="grid grid-cols-2 gap-4">
+              <FormInput label="Email" required type="email" value={userForm.email}
+                onChange={e=>setUserForm(f=>({...f,email:e.target.value}))} error={uErrors.email} placeholder="user@company.com" />
+              <FormInput label="Mobile Number" type="tel" value={userForm.phone || ''}
+                onChange={e=>setUserForm(f=>({...f,phone:e.target.value}))} placeholder="+1 (555) 123-4567" />
+            </div>
             <FormSelect label="Role" value={userForm.role}
               onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} options={ROLES} />
             <div className="relative">
@@ -724,35 +1044,149 @@ export default function Settings() {
         </Modal>
       )}
 
-      {/* CoA Modal */}
+      {/* Permissions Modal */}
+      {showPerms && permUser && (
+        <Modal
+          title={`Permissions — ${permUser.name}`}
+          subtitle={`Role: ${permUser.role} · Toggle to enable or disable access`}
+          onClose={() => setShowPerms(false)}
+          size="sm"
+        >
+          <div className="space-y-3 mb-5">
+            {ALL_PERMISSIONS.map(perm => (
+              <label key={perm} className="flex items-center justify-between cursor-pointer group">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">{PERMISSION_LABELS[perm]}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPermMap(m => ({ ...m, [perm]: !m[perm] }))}
+                  className={`w-10 rounded-full transition-colors flex items-center px-0.5 flex-shrink-0
+                    ${permMap[perm] ? 'bg-gray-900' : 'bg-gray-300'}`}
+                  style={{ height: 22, minWidth: 40 }}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform
+                    ${permMap[perm] ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-3 pt-3 border-t border-gray-100">
+            <button onClick={() => setShowPerms(false)}
+              className="px-4 py-2 text-sm border border-gray-200 rounded-xl font-medium hover:bg-gray-50">
+              Cancel
+            </button>
+            <button onClick={savePerms} disabled={permSaving}
+              className="ml-auto px-5 py-2 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-gray-800 disabled:opacity-50">
+              {permSaving ? 'Saving…' : 'Save Permissions'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* CoA Modal — Figma style */}
       {showCoa && (
-        <Modal title={editCoa ? 'Edit Account' : 'Add Account'}
-               onClose={() => { setShowCoa(false); setEditCoa(null); }} size="sm">
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <FormInput label="Account Code" required value={coaForm.account_code}
-                onChange={e=>setCoaForm(f=>({...f,account_code:e.target.value}))}
-                error={cErrors.account_code} placeholder="e.g. 1001" />
-              <FormSelect label="Account Type" required value={coaForm.account_type}
-                onChange={e=>setCoaForm(f=>({...f,account_type:e.target.value}))} options={ACC_TYPES} />
-            </div>
-            <FormInput label="Account Name" required value={coaForm.account_name}
-              onChange={e=>setCoaForm(f=>({...f,account_name:e.target.value}))}
-              error={cErrors.account_name} placeholder="e.g. Cash in Hand" />
-            <FormInput label="Description" value={coaForm.description}
-              onChange={e=>setCoaForm(f=>({...f,description:e.target.value}))} placeholder="Optional" />
-            <div className="flex gap-3 pt-2 border-t border-gray-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center">
+                  <Database size={17} className="text-gray-700" />
+                </div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {editCoa ? 'Edit Account' : 'Add New Account'}
+                </h2>
+              </div>
               <button onClick={() => { setShowCoa(false); setEditCoa(null); }}
-                className="px-4 py-2 text-sm border border-gray-200 rounded-xl font-medium hover:bg-gray-50">
+                className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+
+              {/* Account Name */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Account Name</label>
+                <input
+                  value={coaForm.account_name}
+                  onChange={e => setCoaForm(f => ({ ...f, account_name: e.target.value }))}
+                  placeholder="e.g. HDFC Current Account"
+                  className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200 ${cErrors.account_name ? 'border-red-400' : 'border-gray-200'}`}
+                />
+                {cErrors.account_name && <p className="mt-1 text-xs text-red-500">{cErrors.account_name}</p>}
+              </div>
+
+              {/* Account Type */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Account Type</label>
+                <div className="relative">
+                  <select
+                    value={coaForm.account_type}
+                    onChange={e => setCoaForm(f => ({ ...f, account_type: e.target.value }))}
+                    className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200 appearance-none bg-white ${cErrors.account_type ? 'border-red-400' : 'border-gray-200'} ${!coaForm.account_type ? 'text-gray-400' : 'text-gray-900'}`}
+                  >
+                    <option value="" disabled>Select an account type</option>
+                    {ACC_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+                {cErrors.account_type && <p className="mt-1 text-xs text-red-500">{cErrors.account_type}</p>}
+              </div>
+
+              {/* Opening Balance + As of Date */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Opening Balance</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={coaForm.opening_balance ?? 0}
+                      onChange={e => setCoaForm(f => ({ ...f, opening_balance: parseFloat(e.target.value) || 0 }))}
+                      placeholder="0.00"
+                      className="w-full pl-7 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">As of Date</label>
+                  <input
+                    type="date"
+                    value={coaForm.as_of_date || ''}
+                    onChange={e => setCoaForm(f => ({ ...f, as_of_date: e.target.value }))}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200 text-gray-700"
+                  />
+                </div>
+              </div>
+
+              {/* Info note */}
+              <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+                <Info size={15} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  This opening balance will be recorded as the initial entry for this ledger account.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+              <button onClick={() => { setShowCoa(false); setEditCoa(null); }}
+                className="px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 rounded-xl border border-gray-200 transition-colors">
                 Cancel
               </button>
               <button onClick={saveCoa}
-                className="ml-auto px-5 py-2 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-gray-800">
-                {editCoa ? 'Update' : 'Add Account'}
+                className="px-6 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition-colors">
+                {editCoa ? 'Update Account' : 'Save Account'}
               </button>
             </div>
           </div>
-        </Modal>
+        </div>
       )}
 
       {deleteUser && (

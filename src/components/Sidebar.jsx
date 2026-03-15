@@ -2,31 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Package,
-  Users, Building2, DollarSign, BarChart3, Settings,
+  Users, Building2, DollarSign, BarChart3, Settings, LogOut, User,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const NAV = [
-  { path: '/',          icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/billing',   icon: FileText,        label: 'Billing & Invoice' },
-  { path: '/inventory', icon: Package,         label: 'Inventory & Services' },
-  { path: '/vendors',   icon: Users,           label: 'Vendors & Purchases' },
-  { path: '/banking',   icon: Building2,       label: 'Banking' },
-  { path: '/expenses',  icon: DollarSign,      label: 'Expenses' },
-  { path: '/reports',   icon: BarChart3,       label: 'Reports' },
-  { path: '/settings',  icon: Settings,        label: 'Settings' },
+  { path: '/',          icon: LayoutDashboard, label: 'Dashboard',           perm: null              },
+  { path: '/billing',   icon: FileText,        label: 'Billing & Invoice',   perm: 'access_billing'  },
+  { path: '/inventory', icon: Package,         label: 'Inventory & Services',perm: 'access_inventory'},
+  { path: '/vendors',   icon: Users,           label: 'Vendors & Purchases', perm: 'access_vendors'  },
+  { path: '/banking',   icon: Building2,       label: 'Banking',             perm: 'access_banking'  },
+  { path: '/expenses',  icon: DollarSign,      label: 'Expenses',            perm: 'access_expenses' },
+  { path: '/reports',   icon: BarChart3,       label: 'Reports',             perm: 'access_reports'  },
+  { path: '/settings',  icon: Settings,        label: 'Settings',            perm: 'access_settings' },
 ];
 
 export default function Sidebar() {
   const navigate  = useNavigate();
   const { pathname } = useLocation();
+  const { currentUser, logout, hasPermission } = useAuth();
   const [company, setCompany] = useState({});
 
   useEffect(() => {
     async function loadCompany() {
       try {
         const c = await window.db.settings.getCompanyProfile();
-        console.log('Loaded company data in Sidebar:', c);
-        console.log('Logo data length:', c?.logo?.length || 'no logo');
         setCompany(c || {});
       } catch (e) {
         console.error('Failed to load company profile', e);
@@ -34,20 +34,29 @@ export default function Sidebar() {
     }
     loadCompany();
 
-    // Listen for company profile updates
-    const handleCompanyUpdate = () => {
-      console.log('Company profile update event received in Sidebar');
-      loadCompany();
-    };
+    const handleCompanyUpdate = () => loadCompany();
     window.addEventListener('companyProfileUpdated', handleCompanyUpdate);
-
-    return () => {
-      window.removeEventListener('companyProfileUpdated', handleCompanyUpdate);
-    };
+    return () => window.removeEventListener('companyProfileUpdated', handleCompanyUpdate);
   }, []);
 
   const isActive = (path) =>
     path === '/' ? pathname === '/' : pathname.startsWith(path);
+
+  // Filter nav items by permission
+  const visibleNav = NAV.filter(({ perm }) => !perm || hasPermission(perm));
+
+  // Build initials for current user avatar
+  const userInitials = (() => {
+    if (!currentUser?.name) return '';
+    const parts = currentUser.name.trim().split(' ');
+    return parts.length >= 2
+      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+      : currentUser.name.slice(0, 2).toUpperCase();
+  })();
+
+  const handleLogout = () => {
+    logout();
+  };
 
   return (
     <aside
@@ -64,18 +73,16 @@ export default function Sidebar() {
           )}
         </div>
         <div className="min-w-0">
-          <p className="text-white font-bold text-sm leading-tight">
+          <p className="text-white font-bold text-sm leading-tight truncate">
             {company.company_name || 'Accounting'}
           </p>
-          <p className="text-gray-400 text-xs leading-tight">
-            {company.company_name ? 'Pro' : 'Pro'}
-          </p>
+          <p className="text-gray-400 text-xs leading-tight">Pro</p>
         </div>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 py-3 overflow-y-auto overflow-x-hidden">
-        {NAV.map(({ path, icon: Icon, label }) => {
+        {visibleNav.map(({ path, icon: Icon, label }) => {
           const active = isActive(path);
           return (
             <button
@@ -96,9 +103,30 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="px-4 py-3 border-t border-white/10 flex-shrink-0">
-        <p className="text-xs text-gray-500">Version 1.0.0</p>
+      {/* User info + logout */}
+      <div className="px-3 py-3 border-t border-white/10 flex-shrink-0">
+        <div className="flex items-center gap-2.5 mb-2">
+          <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+            {userInitials
+              ? <span className="text-white text-[10px] font-bold">{userInitials}</span>
+              : <User size={12} className="text-white"/>
+            }
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-xs font-semibold truncate">
+              {currentUser?.name || currentUser?.email || 'User'}
+            </p>
+            <p className="text-gray-400 text-[10px] truncate">{currentUser?.role}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            title="Sign out"
+            className="text-gray-400 hover:text-white transition-colors flex-shrink-0 p-1 rounded hover:bg-white/10"
+          >
+            <LogOut size={13}/>
+          </button>
+        </div>
+        <p className="text-xs text-gray-600">Version 1.0.0</p>
       </div>
     </aside>
   );

@@ -32,6 +32,67 @@ body {
 /* Table row hover */
 tbody tr:hover { background-color: #F9FAFB; }
 
+/* ─────────────────────────────────────────────────────────
+   Dark Mode — applied via .dark class on <html>
+   Strategy: only override light surfaces so the dark
+   sidebar/buttons (bg-gray-900 / bg-gray-800) stay unchanged.
+───────────────────────────────────────────────────────── */
+.dark body {
+  background: #0f172a;
+  color: #f1f5f9;
+}
+
+/* surface overrides */
+.dark .bg-white       { background-color: #1e293b !important; }
+.dark .bg-gray-50     { background-color: #162032 !important; }
+.dark .bg-gray-100    { background-color: #0f172a !important; }
+.dark .bg-gray-200    { background-color: #1e293b !important; }
+
+/* text overrides */
+.dark .text-gray-900  { color: #f1f5f9  !important; }
+.dark .text-gray-800  { color: #e2e8f0  !important; }
+.dark .text-gray-700  { color: #cbd5e1  !important; }
+.dark .text-gray-600  { color: #94a3b8  !important; }
+.dark .text-gray-500  { color: #64748b  !important; }
+.dark .text-gray-400  { color: #475569  !important; }
+
+/* border overrides */
+.dark .border-gray-100 { border-color: #1e293b !important; }
+.dark .border-gray-200 { border-color: #334155 !important; }
+.dark .border-gray-300 { border-color: #475569 !important; }
+.dark .divide-gray-100 > * + * { border-color: #1e293b !important; }
+.dark .divide-gray-200 > * + * { border-color: #334155 !important; }
+
+/* form controls */
+.dark input:not([class*="bg-gray-9"]):not([class*="bg-blue"]):not([class*="bg-red"]),
+.dark select:not([class*="bg-gray-9"]),
+.dark textarea {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+.dark input::placeholder,
+.dark textarea::placeholder { color: #475569 !important; }
+
+/* scrollbar in dark */
+.dark ::-webkit-scrollbar-thumb { background: #334155; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* table row hover in dark */
+.dark tbody tr:hover { background-color: #1e293b; }
+
+/* stat cards & elevated surfaces */
+.dark .shadow-sm,
+.dark .shadow-md,
+.dark .shadow-lg,
+.dark .shadow-xl { --tw-shadow-color: rgba(0,0,0,0.5); }
+
+/* ring / focus */
+.dark .focus\:ring-gray-200:focus { --tw-ring-color: #334155 !important; }
+
+/* modal overlay */
+.dark .modal-overlay { background-color: rgba(0,0,0,0.7) !important; }
+
 /* Print styles */
 @media print {
   body { background: white !important; color: black !important; }

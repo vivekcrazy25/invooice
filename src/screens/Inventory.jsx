@@ -2,18 +2,21 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, RefreshCw, MoreVertical,
   Edit2, Trash2, Package, AlertTriangle,
-  TrendingDown, TrendingUp, QrCode,
+  TrendingDown, TrendingUp, QrCode, ScanLine,
 } from 'lucide-react';
-import TopBar        from '../components/TopBar.jsx';
-import DataTable     from '../components/DataTable.jsx';
-import StatusBadge   from '../components/StatusBadge.jsx';
-import StatCard      from '../components/StatCard.jsx';
-import Modal         from '../components/Modal.jsx';
-import ConfirmDialog from '../components/ConfirmDialog.jsx';
-import FormInput     from '../components/FormInput.jsx';
-import FormSelect    from '../components/FormSelect.jsx';
-import { useToast }  from '../components/ToastContext.jsx';
-import { formatCurrency } from '../utils/formatters.js';
+import TopBar              from '../components/TopBar.jsx';
+import DataTable           from '../components/DataTable.jsx';
+import StatusBadge         from '../components/StatusBadge.jsx';
+import StatCard            from '../components/StatCard.jsx';
+import Modal               from '../components/Modal.jsx';
+import ConfirmDialog       from '../components/ConfirmDialog.jsx';
+import FormInput           from '../components/FormInput.jsx';
+import FormSelect          from '../components/FormSelect.jsx';
+import { useToast }        from '../components/ToastContext.jsx';
+import BarcodeScannerModal from '../components/BarcodeScannerModal.jsx';
+import BulkImportModal    from '../components/BulkImportModal.jsx';
+import { useBarcodeGun }   from '../hooks/useBarcodeGun.js';
+import { formatCurrency }  from '../utils/formatters.js';
 
 const UNITS = ['PCS','KG','MTR','BOX','SET','ROLL','LTR','PKT','PAIR'];
 
@@ -49,6 +52,40 @@ export default function Inventory() {
   const [editItem,    setEditItem]    = useState(null);
   const [deleteId,    setDeleteId]    = useState(null);
   const [menuOpen,    setMenuOpen]    = useState(null);
+
+  /* barcode scanner */
+  const [showScanner,    setShowScanner]    = useState(false);
+  const [highlightedId,  setHighlightedId]  = useState(null);
+
+  /* bulk import */
+  const [showBulkImport, setShowBulkImport] = useState(false);
+
+  const handleBarcodeScan = useCallback(async (code) => {
+    setShowScanner(false);
+    try {
+      let product = await window.db.inventory.getByBarcode(code);
+      if (!product) product = await window.db.inventory.getBySku(code);
+      if (product) {
+        // Set search to product name so it shows in the list
+        setSearch(product.name);
+        setHighlightedId(product.id);
+        toast(`Found: ${product.name}`, 'success');
+        setTimeout(() => setHighlightedId(null), 3000);
+      } else {
+        // Pre-fill barcode field in add modal
+        setEditItem(null);
+        setForm({ ...EMPTY, barcode: code });
+        setErrors({});
+        setShowModal(true);
+        toast(`No product for barcode "${code}". Add it now.`, 'warning');
+      }
+    } catch {
+      toast('Barcode lookup failed', 'error');
+    }
+  }, []); // eslint-disable-line
+
+  /* Barcode gun listener */
+  useBarcodeGun({ onScan: handleBarcodeScan, enabled: !showModal && !showScanner && !showCatModal });
 
   /* form */
   const [form,       setForm]   = useState(EMPTY);
@@ -242,6 +279,15 @@ export default function Inventory() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+          {/* Barcode scan button */}
+          <button
+            onClick={() => setShowScanner(true)}
+            title="Scan barcode to find product"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl
+                       text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors font-medium"
+          >
+            <ScanLine size={14}/> Scan Barcode
+          </button>
 
           <select value={catFilter} onChange={e=>setCatFilter(e.target.value)}
             className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none">
@@ -268,6 +314,19 @@ export default function Inventory() {
                          text-gray-700 hover:bg-gray-50 transition-colors">
               + Category
             </button>
+            <button
+              onClick={() => setShowBulkImport(true)}
+              title="Import multiple products from Excel"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-green-200 bg-green-50
+                         text-green-700 rounded-xl font-medium hover:bg-green-100 transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Import Excel
+            </button>
             <button onClick={openAdd}
               className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl
                          text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm">
@@ -276,7 +335,13 @@ export default function Inventory() {
           </div>
         </div>
 
-        <DataTable columns={columns} data={products} loading={loading} emptyMessage="No products found." />
+        <DataTable
+          columns={columns}
+          data={products}
+          loading={loading}
+          emptyMessage="No products found."
+          rowClassName={(row) => row.id === highlightedId ? 'bg-green-50 ring-1 ring-inset ring-green-200' : ''}
+        />
       </div>
 
       {/* ── Add / Edit Product Modal ── */}
@@ -431,6 +496,24 @@ export default function Inventory() {
           confirmText="Delete Product"
           onConfirm={handleDelete}
           onCancel={() => setDeleteId(null)}
+        />
+      )}
+
+      {/* Barcode Scanner Modal */}
+      {showScanner && (
+        <BarcodeScannerModal
+          title="Scan Product Barcode"
+          onScan={handleBarcodeScan}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
+
+      {/* Bulk Import Modal */}
+      {showBulkImport && (
+        <BulkImportModal
+          categories={categories}
+          onClose={() => setShowBulkImport(false)}
+          onSuccess={() => { load(); toast('Products imported successfully!', 'success'); }}
         />
       )}
     </div>

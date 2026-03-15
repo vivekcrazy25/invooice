@@ -79,6 +79,49 @@ function registerInventoryHandlers(ipcMain) {
   ipcMain.handle('search-products', (_, q)  =>
     db.prepare("SELECT p.*,c.name category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id WHERE p.name LIKE ? OR p.sku LIKE ? ORDER BY p.name LIMIT 20").all(`%${q}%`,`%${q}%`)
   );
+
+  /* ── Bulk import products from Excel ── */
+  ipcMain.handle('bulk-add-products', (_, products) => {
+    const results = { inserted: 0, skipped: 0, errors: [] };
+    const insertStmt = db.prepare(`INSERT INTO products
+      (sku,name,category_id,hsn_code,purchase_price,selling_price,opening_stock,current_stock,reorder_level,unit,barcode,status,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+
+    const doInsert = db.transaction((rows) => {
+      for (const d of rows) {
+        try {
+          const sku     = d.sku || nextSKU(db);
+          const stock   = parseInt(d.opening_stock) || 0;
+          const reorder = parseInt(d.reorder_level)  || 10;
+          const now     = new Date().toISOString();
+          insertStmt.run(
+            sku,
+            d.name,
+            d.category_id || null,
+            d.hsn_code  || '',
+            parseFloat(d.purchase_price) || 0,
+            parseFloat(d.selling_price)  || 0,
+            stock, stock, reorder,
+            d.unit || 'PCS',
+            d.barcode || '',
+            calcStatus(stock, reorder),
+            now, now
+          );
+          results.inserted++;
+        } catch (e) {
+          results.skipped++;
+          results.errors.push({ name: d.name || '(unknown)', error: e.message });
+        }
+      }
+    });
+
+    try {
+      doInsert(products);
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+    return { success: true, ...results };
+  });
 }
 
 module.exports = { registerInventoryHandlers };

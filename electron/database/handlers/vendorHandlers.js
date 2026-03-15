@@ -144,9 +144,41 @@ function registerVendorHandlers(ipcMain) {
       LEFT JOIN vendors v ON vp.vendor_id=v.id ${where} ORDER BY vp.payment_date DESC`).all(p);
   });
 
-  ipcMain.handle('get-pay-bills', (_, f={}) =>
-    db.prepare(`SELECT * FROM vendors WHERE outstanding_balance > 0 ORDER BY outstanding_balance DESC`).all()
-  );
+  ipcMain.handle('get-pay-bills', (_, f={}) => {
+    const { search = '', status = '' } = f;
+    const rows = db.prepare(`
+      SELECT
+        po.id,
+        po.po_number,
+        v.id   AS vendor_id,
+        v.name AS vendor_name,
+        po.total_amount,
+        po.expected_date            AS due_date,
+        po.created_at,
+        COALESCE(SUM(vp.amount), 0) AS paid_amount,
+        po.total_amount - COALESCE(SUM(vp.amount), 0) AS pending_amount,
+        MAX(vp.payment_date)        AS last_payment_date,
+        CASE
+          WHEN COALESCE(SUM(vp.amount), 0) <= 0                  THEN 'Pending'
+          WHEN COALESCE(SUM(vp.amount), 0) >= po.total_amount     THEN 'Paid'
+          ELSE 'Partial'
+        END AS payment_status
+      FROM   purchase_orders po
+      JOIN   vendors v ON po.vendor_id = v.id
+      LEFT JOIN vendor_payments vp ON vp.po_id = po.id
+      WHERE  po.total_amount > 0
+      GROUP  BY po.id
+      ORDER  BY po.created_at DESC
+    `).all();
+
+    return rows.filter(r => {
+      const matchSearch = !search ||
+        r.po_number?.toLowerCase().includes(search.toLowerCase()) ||
+        r.vendor_name?.toLowerCase().includes(search.toLowerCase());
+      const matchStatus = !status || status === 'All' || r.payment_status === status;
+      return matchSearch && matchStatus;
+    });
+  });
 
   ipcMain.handle('create-vendor-payment', (_, d) => {
     const res = db.prepare(`INSERT INTO vendor_payments

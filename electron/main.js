@@ -2,6 +2,10 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path  = require('path');
 const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 
+// Enable BarcodeDetector / Shape Detection API (works on macOS; on Windows needs Win10 1809+)
+app.commandLine.appendSwitch('enable-features', 'ShapeDetection,MediaStreamTrackProcessor');
+app.commandLine.appendSwitch('enable-experimental-web-platform-features');
+
 // Initialize logger
 const logger = require('./logger');
 

@@ -172,11 +172,24 @@ function runMigrations(db) {
       is_active INTEGER DEFAULT 1,
       created_at TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS user_permissions (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      permission TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      PRIMARY KEY (user_id, permission)
+    );
   `);
 
   // Add logo column to company_profile if it doesn't exist
   try {
     db.exec(`ALTER TABLE company_profile ADD COLUMN logo TEXT;`);
+  } catch (e) {
+    // Column might already exist, ignore error
+  }
+
+  // Add phone column to users if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN phone TEXT;`);
   } catch (e) {
     // Column might already exist, ignore error
   }

@@ -1,11 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Search, RefreshCw, MoreVertical,
-  Edit2, Trash2, DollarSign, TrendingUp, Tag, Calendar,
+  Plus, Search, MoreVertical,
+  Edit2, Trash2, DollarSign, Tag, Lightbulb,
 } from 'lucide-react';
-import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
-} from 'recharts';
 import TopBar        from '../components/TopBar.jsx';
 import DataTable     from '../components/DataTable.jsx';
 import StatCard      from '../components/StatCard.jsx';
@@ -16,18 +13,7 @@ import FormSelect    from '../components/FormSelect.jsx';
 import { useToast }  from '../components/ToastContext.jsx';
 import { formatCurrency, formatDate, today } from '../utils/formatters.js';
 
-const PIE_COLORS = ['#111827','#6B7280','#9CA3AF','#D1D5DB','#F3F4F6','#374151'];
 const EMPTY = { category_id:'', amount:'', description:'', expense_date: today(), payment_mode:'Cash', reference:'', notes:'' };
-
-function PieTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-xl">
-      <p className="font-semibold">{payload[0].name}</p>
-      <p className="text-gray-300 mt-0.5">{formatCurrency(payload[0].value)}</p>
-    </div>
-  );
-}
 
 export default function Expenses() {
   const toast = useToast();
@@ -148,109 +134,128 @@ export default function Expenses() {
   );
 
   const columns = [
-    { header:'S.No',        render:(_,__,i)=><span className="text-gray-400">{i+1}</span> },
-    { header:'Expense No.', key:'expense_no',     render:v=><span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{v}</span> },
-    { header:'Category',    key:'category_name',  render:v=>(
-        <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs font-medium text-gray-600">{v||'—'}</span>
-      ), sortable:true },
-    { header:'Description', key:'description',    render:v=><span className="text-gray-900">{v}</span> },
-    { header:'Amount',      key:'amount',         render:v=><span className="font-bold text-red-600">-{formatCurrency(v)}</span>, sortable:true },
-    { header:'Date',        key:'expense_date',   render:v=>formatDate(v), sortable:true },
-    { header:'Payment Mode',key:'payment_mode' },
-    { header:'Reference',   key:'reference',      render:v=>v||'—' },
+    { header:'Expense ID',  key:'expense_no',    render:v=><span className="font-semibold text-gray-900">{v}</span> },
+    { header:'Date',        key:'expense_date',  render:v=>formatDate(v), sortable:true },
+    { header:'Category',    key:'category_name', render:v=><span className="text-gray-700">{v||'—'}</span>, sortable:true },
+    { header:'Description', key:'description',   render:v=><span className="text-gray-600">{v}</span> },
+    { header:'Amount',      key:'amount',        render:v=><span className="font-bold text-red-500">{formatCurrency(v)}</span>, sortable:true },
     { header:'Actions',     render:(_,row)=>actionCell(row) },
   ];
 
   const catOptions = categories.map(c => ({ value: c.id, label: c.name }));
-  const pieData    = (stats.byCategory || []).map(c => ({ name: c.name, value: c.total }));
   const thisMonth  = stats.thisMonth || 0;
   const lastMonth  = stats.lastMonth || 0;
   const change     = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth * 100).toFixed(1) : 0;
 
+  // Top 3 categories for dynamic stat cards
+  const CAT_COLORS = ['pink', 'yellow', 'green'];
+  const topCats    = (stats.byCategory || []).slice(0, 3);
+
+  // Insight: find the category with the biggest change vs last period
+  const topCat = topCats[0];
+  const insightText = topCat
+    ? `${topCat.name} is your largest expense this period at ${formatCurrency(topCat.total)}.`
+    : 'Add expenses to see insights here.';
+
   return (
     <div className="flex flex-col h-full overflow-hidden" onClick={() => setMenuOpen(null)}>
-      <TopBar title="Expenses" subtitle="Track and categorise all business expenses" />
+      <TopBar title="Expenses" subtitle="Track and manage business expenses" />
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-5 anim-fadeup">
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 anim-fadeup">
 
-        {/* top row: stats + chart */}
-        <div className="flex gap-4">
-          <div className="flex-1 grid grid-cols-3 gap-4 content-start">
-            <StatCard title="Total Expenses"    value={formatCurrency(stats.total)}    icon={DollarSign} color="red"    loading={loading} />
-            <StatCard title="This Month"        value={formatCurrency(thisMonth)}      icon={Calendar}   color="pink"   loading={loading} />
-            <StatCard title="Last Month"        value={formatCurrency(lastMonth)}      icon={TrendingUp} color="purple" loading={loading} />
-            {/* category breakdown list */}
-            <div className="col-span-3 bg-white rounded-xl border border-gray-100 p-4">
-              <h3 className="font-bold text-gray-900 text-sm mb-3">Top Categories</h3>
-              <div className="space-y-2">
-                {(stats.byCategory || []).slice(0, 5).map((c, i) => {
-                  const pct = stats.total > 0 ? (c.total / stats.total * 100) : 0;
-                  return (
-                    <div key={i}>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="font-medium text-gray-700">{c.name}</span>
-                        <span className="text-gray-500 font-semibold">{formatCurrency(c.total)}</span>
-                      </div>
-                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-gray-900 rounded-full transition-all"
-                          style={{ width: `${pct.toFixed(1)}%` }} />
-                      </div>
+        {/* ── 4 stat cards ── */}
+        <div className="grid grid-cols-4 gap-4">
+          <StatCard title="Total Expenses (This Month)" value={formatCurrency(thisMonth)} icon={DollarSign} color="blue" loading={loading} />
+          {topCats.map((c, i) => (
+            <StatCard key={c.name} title={c.name} value={formatCurrency(c.total)} icon={Tag} color={CAT_COLORS[i]} loading={loading} />
+          ))}
+          {Array.from({ length: 3 - topCats.length }).map((_, i) => (
+            <div key={`ph-${i}`} className="bg-gray-50 rounded-2xl border border-dashed border-gray-200 flex items-center justify-center" style={{minHeight:120}}>
+              <p className="text-xs text-gray-300 font-medium">No data</p>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Two-column main area ── */}
+        <div className="flex gap-4 flex-1 min-h-0">
+
+          {/* ── LEFT: Recent Expenses table ── */}
+          <div className="flex-1 min-w-0 bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
+            {/* card header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+              <div>
+                <h3 className="font-bold text-gray-900">Recent Expenses</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Latest expense entries</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* inline search */}
+                <div className="relative">
+                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+                  <input
+                    className="pl-8 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg w-44
+                               focus:outline-none focus:ring-2 focus:ring-gray-200"
+                    placeholder="Search expenses…"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
+                </div>
+                <button onClick={openAdd}
+                  className="flex items-center gap-1.5 bg-gray-900 text-white px-3 py-1.5 rounded-xl text-xs font-semibold hover:bg-gray-800">
+                  <Plus size={13}/> Add Expense
+                </button>
+              </div>
+            </div>
+
+            {/* table */}
+            <div className="flex-1 overflow-y-auto">
+              <DataTable columns={columns} data={expenses} loading={loading} emptyMessage="No expenses recorded yet." />
+            </div>
+          </div>
+
+          {/* ── RIGHT: Expense By Category + Insight ── */}
+          <div className="w-80 flex-shrink-0 bg-white rounded-2xl border border-gray-100 p-5 flex flex-col gap-4">
+            <div>
+              <h3 className="font-bold text-gray-900">Expense By Category</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Latest expense entries</p>
+            </div>
+
+            {/* progress bars */}
+            <div className="space-y-4 flex-1">
+              {(stats.byCategory || []).slice(0, 6).map((c, i) => {
+                const pct = stats.total > 0 ? Math.round(c.total / stats.total * 100) : 0;
+                return (
+                  <div key={i}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-medium text-gray-700">{c.name}</span>
+                      <span className="text-sm font-bold text-gray-800">{pct}%</span>
                     </div>
-                  );
-                })}
-                {(stats.byCategory || []).length === 0 && (
-                  <p className="text-xs text-gray-400 text-center py-4">No expense data yet</p>
-                )}
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gray-900 rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              {(stats.byCategory || []).length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-6">No expense data yet</p>
+              )}
+            </div>
+
+            {/* Insight card */}
+            <div className="flex items-start gap-3 bg-gray-50 rounded-xl p-4 border border-gray-100 mt-auto">
+              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                <Lightbulb size={14} className="text-gray-600" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Insight</p>
+                <p className="text-xs text-gray-700 leading-relaxed">{insightText}</p>
               </div>
             </div>
           </div>
 
-          {/* pie chart */}
-          <div className="w-64 bg-white rounded-xl border border-gray-100 p-4 flex flex-col items-center justify-center">
-            <h3 className="font-bold text-gray-900 text-sm mb-3 self-start">By Category</h3>
-            {pieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={75}
-                       dataKey="value" paddingAngle={3}>
-                    {pieData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<PieTooltip />} />
-                  <Legend iconType="circle" iconSize={8}
-                    formatter={(v) => <span style={{ fontSize: 11, color:'#6B7280' }}>{v}</span>} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-sm text-gray-400 py-8">No data yet</p>
-            )}
-          </div>
         </div>
-
-        {/* filter row + add btn */}
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
-            <input className="pl-9 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-xl w-56
-                              focus:outline-none focus:ring-2 focus:ring-gray-200"
-              placeholder="Search expenses…" value={search} onChange={e=>setSearch(e.target.value)}/>
-          </div>
-          <select value={catFilter} onChange={e=>setCatFilter(e.target.value)}
-            className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none">
-            <option value="All">All Categories</option>
-            {categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <button onClick={load} className="p-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50">
-            <RefreshCw size={14} className="text-gray-500"/>
-          </button>
-          <button onClick={openAdd}
-            className="ml-auto flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-800 shadow-sm">
-            <Plus size={15}/> Add Expense
-          </button>
-        </div>
-
-        <DataTable columns={columns} data={expenses} loading={loading} emptyMessage="No expenses recorded yet." />
       </div>
 
       {/* ── Add/Edit Modal ── */}
